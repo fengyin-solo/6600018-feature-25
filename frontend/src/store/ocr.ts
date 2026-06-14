@@ -19,8 +19,28 @@ export const useOcrStore = defineStore('ocr', () => {
     return list.filter(a => a.type === annotationFilter.value)
   })
 
-  // Mock data
-  const MOCK_DOC: Document = {
+  const visibleAnnotations = computed(() => {
+    const list = currentDoc.value?.annotations || []
+    if (annotationFilter.value === 'all') return list
+    const selId = selectedAnnotationId.value
+    const filtered = list.filter(a => a.type === annotationFilter.value)
+    if (!selId) return filtered
+    const sel = list.find(a => a.id === selId)
+    if (sel && !filtered.includes(sel)) return [...filtered, sel]
+    return filtered
+  })
+
+  const annotationCounts = computed(() => {
+    const list = currentDoc.value?.annotations || []
+    return {
+      all: list.length,
+      region: list.filter(a => a.type === 'region').length,
+      character: list.filter(a => a.type === 'character').length,
+      note: list.filter(a => a.type === 'note').length,
+    }
+  })
+
+  const MOCK_DOC_BASE: Document = {
     id: '1',
     name: '论语·学而篇',
     imageUrl: '',
@@ -44,8 +64,12 @@ export const useOcrStore = defineStore('ocr', () => {
   }
 
   function loadMockDocument() {
-    documents.value = [MOCK_DOC]
-    currentDoc.value = MOCK_DOC
+    const clone: Document = JSON.parse(JSON.stringify(MOCK_DOC_BASE))
+    clone.id = Date.now().toString()
+    documents.value = [clone]
+    currentDoc.value = clone
+    selectedAnnotationId.value = null
+    annotationFilter.value = 'all'
   }
 
   async function uploadAndOCR(file: File) {
@@ -77,14 +101,21 @@ export const useOcrStore = defineStore('ocr', () => {
 
   function addAnnotation(type: Annotation['type'], bbox: [number, number, number, number], label: string, content: string) {
     if (!currentDoc.value) return
-    currentDoc.value.annotations.push({
-      id: Date.now().toString(),
-      type, bbox, label, content
-    })
+    const id = Date.now().toString()
+    const annotation: Annotation = { id, type, bbox, label, content }
+    currentDoc.value.annotations.push(annotation)
+    if (annotationFilter.value !== 'all' && annotationFilter.value !== type) {
+      annotationFilter.value = 'all'
+    }
+    selectedAnnotationId.value = id
+    return id
   }
 
   function removeAnnotation(id: string) {
     if (!currentDoc.value) return
+    if (selectedAnnotationId.value === id) {
+      selectedAnnotationId.value = null
+    }
     currentDoc.value.annotations = currentDoc.value.annotations.filter(a => a.id !== id)
   }
 
@@ -118,7 +149,7 @@ export const useOcrStore = defineStore('ocr', () => {
 
   return {
     documents, currentDoc, isLoading, searchQuery, searchResults,
-    annotationFilter, selectedAnnotationId, filteredAnnotations,
+    annotationFilter, selectedAnnotationId, filteredAnnotations, visibleAnnotations, annotationCounts,
     loadMockDocument, uploadAndOCR, addAnnotation, removeAnnotation,
     selectAnnotation, convertVariant, searchInDocuments, exportTEI
   }

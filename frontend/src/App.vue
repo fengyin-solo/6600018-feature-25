@@ -75,11 +75,12 @@
       <div class="flex gap-1 flex-wrap">
         <button v-for="f in filterOptions" :key="f.value"
           @click="store.annotationFilter = f.value"
-          class="px-2 py-1 rounded text-xs font-medium transition-colors"
+          class="px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1"
           :class="store.annotationFilter === f.value
             ? 'bg-amber-500 text-black'
             : 'bg-gray-800 text-gray-400 hover:bg-gray-700'">
           {{ f.label }}
+          <span class="text-[10px] opacity-75">({{ filterCount(f.value) }})</span>
         </button>
       </div>
       <div v-if="store.currentDoc" class="space-y-1">
@@ -88,16 +89,19 @@
           class="rounded p-2 text-xs flex justify-between cursor-pointer transition-colors"
           :class="store.selectedAnnotationId === a.id
             ? 'ring-2 ring-offset-1 ring-offset-gray-900 ' + typeRingClass(a.type) + ' ' + typeBgActiveClass(a.type)
-            : 'bg-gray-800 hover:bg-gray-750'">
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block w-2 h-2 rounded-full" :class="typeDotClass(a.type)"></span>
-            <span class="px-1 rounded text-[10px] font-medium" :class="typeBadgeClass(a.type)">{{ typeLabel(a.type) }}</span>
-            <span class="text-gray-300">{{ a.label }}: {{ a.content }}</span>
+            : 'bg-gray-800 hover:bg-gray-700'">
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="typeDotClass(a.type)"></span>
+            <span class="px-1 rounded text-[10px] font-medium shrink-0" :class="typeBadgeClass(a.type)">{{ typeLabel(a.type) }}</span>
+            <span class="text-gray-200 truncate">{{ a.label }}<template v-if="a.content">: {{ a.content }}</template></span>
           </span>
-          <button @click.stop="store.removeAnnotation(a.id)" class="text-red-400 hover:underline shrink-0">删除</button>
+          <button @click.stop="store.removeAnnotation(a.id)" class="text-red-400 hover:underline shrink-0 ml-2">删除</button>
         </div>
         <div v-if="!store.currentDoc.annotations.length" class="text-gray-600 text-xs">
           在图片上拖拽框选区域添加标注
+        </div>
+        <div v-else-if="!store.filteredAnnotations.length" class="text-gray-500 text-xs italic">
+          当前筛选条件下暂无标注
         </div>
       </div>
     </div>
@@ -162,6 +166,12 @@ function typeBgActiveClass(type: Annotation['type']): string {
     note: 'bg-emerald-950',
   }
   return map[type]
+}
+
+function filterCount(value: 'all' | Annotation['type']): number {
+  const c = store.annotationCounts
+  if (value === 'all') return c.all
+  return c[value]
 }
 
 function onUpload(e: Event) {
