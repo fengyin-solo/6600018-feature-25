@@ -1,5 +1,6 @@
 <template>
-  <div class="relative w-full h-full" @mousedown="startDrag" @mousemove="onDrag" @mouseup="endDrag">
+  <div class="relative w-full h-full overflow-auto" ref="scrollContainer"
+    @mousedown="startDrag" @mousemove="onDrag" @mouseup="endDrag">
     <!-- Image -->
     <img v-if="store.currentDoc?.imageUrl" :src="store.currentDoc.imageUrl"
       class="absolute inset-0 w-full h-full object-contain" ref="imgRef" />
@@ -14,10 +15,24 @@
         <text :x="r.bbox[0]" :y="r.bbox[1] - 5" fill="#fbbf24" font-size="12">{{ r.text }}</text>
       </g>
       <!-- Annotations -->
-      <g v-for="a in store.currentDoc?.annotations || []" :key="a.id">
+      <g v-for="a in store.filteredAnnotations" :key="a.id"
+        class="cursor-pointer pointer-events-auto"
+        @click.stop="store.selectAnnotation(store.selectedAnnotationId === a.id ? null : a.id)"
+        @mouseenter="store.selectAnnotation(a.id)"
+        @mouseleave="() => {}">
         <rect :x="a.bbox[0]" :y="a.bbox[1]" :width="a.bbox[2]" :height="a.bbox[3]"
-          fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5,5" />
-        <text :x="a.bbox[0]" :y="a.bbox[1] - 5" fill="#3b82f6" font-size="11">{{ a.label }}</text>
+          :fill="isSelected(a.id) ? typeHighlightColor(a.type, 0.3) : typeHighlightColor(a.type, 0.1)"
+          :stroke="typeStrokeColor(a.type)"
+          :stroke-width="isSelected(a.id) ? 3 : 2"
+          :stroke-dasharray="isSelected(a.id) ? 'none' : '5,5'"
+          rx="2" />
+        <text :x="a.bbox[0]" :y="a.bbox[1] - 5"
+          :fill="typeStrokeColor(a.type)" font-size="11" font-weight="bold">
+          {{ a.label }}
+        </text>
+        <circle v-if="isSelected(a.id)"
+          :cx="a.bbox[0] + a.bbox[2] / 2" :cy="a.bbox[1] + a.bbox[3] / 2" r="4"
+          :fill="typeStrokeColor(a.type)" />
       </g>
       <!-- Drag selection -->
       <rect v-if="dragging" :x="dragRect.x" :y="dragRect.y" :width="dragRect.w" :height="dragRect.h"
@@ -27,15 +42,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, watch } from 'vue'
 import { useOcrStore } from '../store/ocr'
+import type { Annotation } from '../types'
 
 const store = useOcrStore()
 const mockCanvas = ref<HTMLCanvasElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
+const scrollContainer = ref<HTMLElement | null>(null)
 const dragging = ref(false)
 const dragStart = reactive({ x: 0, y: 0 })
 const dragRect = reactive({ x: 0, y: 0, w: 0, h: 0 })
+
+const TYPE_COLORS: Record<Annotation['type'], string> = {
+  region: '#3b82f6',
+  character: '#f59e0b',
+  note: '#10b981',
+}
+
+function typeStrokeColor(type: Annotation['type']): string {
+  return TYPE_COLORS[type]
+}
+
+function typeHighlightColor(type: Annotation['type'], alpha: number): string {
+  const hex = TYPE_COLORS[type].replace('#', '')
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+function isSelected(id: string): boolean {
+  return store.selectedAnnotationId === id
+}
+
+function scrollToAnnotation(id: string | null) {
+  if (!id || !scrollContainer.value) return
+  const a = store.currentDoc?.annotations.find(a => a.id === id)
+  if (!a) return
+  const container = scrollContainer.value
+  const cx = a.bbox[0] + a.bbox[2] / 2
+  const cy = a.bbox[1] + a.bbox[3] / 2
+  container.scrollTo({
+    left: cx - container.clientWidth / 2,
+    top: cy - container.clientHeight / 2,
+    behavior: 'smooth',
+  })
+}
+
+watch(() => store.selectedAnnotationId, scrollToAnnotation)
 
 onMounted(() => {
   if (mockCanvas.value) {
@@ -90,8 +145,10 @@ function onDrag(e: MouseEvent) {
 function endDrag(e: MouseEvent) {
   if (!dragging.value || dragRect.w < 10 || dragRect.h < 10) { dragging.value = false; return }
   dragging.value = false
-  const label = prompt('标注标签（如：章节/段落/异体字）') || 'region'
+  const typeInput = prompt('标注类型 (region / character / note)', 'region') || 'region'
+  const type = (['region', 'character', 'note'].includes(typeInput) ? typeInput : 'region') as Annotation['type']
+  const label = prompt('标注标签（如：章节/段落/异体字）') || type
   const content = prompt('标注内容') || ''
-  store.addAnnotation('region', [dragRect.x, dragRect.y, dragRect.w, dragRect.h], label, content)
+  store.addAnnotation(type, [dragRect.x, dragRect.y, dragRect.w, dragRect.h], label, content)
 }
 </script>

@@ -1,6 +1,8 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { Document, OCRResult, Annotation } from '../types'
+
+export type AnnotationType = Annotation['type']
 
 export const useOcrStore = defineStore('ocr', () => {
   const documents = ref<Document[]>([])
@@ -8,6 +10,14 @@ export const useOcrStore = defineStore('ocr', () => {
   const isLoading = ref(false)
   const searchQuery = ref('')
   const searchResults = ref<OCRResult[]>([])
+  const annotationFilter = ref<AnnotationType | 'all'>('all')
+  const selectedAnnotationId = ref<string | null>(null)
+
+  const filteredAnnotations = computed(() => {
+    const list = currentDoc.value?.annotations || []
+    if (annotationFilter.value === 'all') return list
+    return list.filter(a => a.type === annotationFilter.value)
+  })
 
   // Mock data
   const MOCK_DOC: Document = {
@@ -102,9 +112,14 @@ export const useOcrStore = defineStore('ocr', () => {
     return tei
   }
 
+  function selectAnnotation(id: string | null) {
+    selectedAnnotationId.value = id
+  }
+
   return {
     documents, currentDoc, isLoading, searchQuery, searchResults,
+    annotationFilter, selectedAnnotationId, filteredAnnotations,
     loadMockDocument, uploadAndOCR, addAnnotation, removeAnnotation,
-    convertVariant, searchInDocuments, exportTEI
+    selectAnnotation, convertVariant, searchInDocuments, exportTEI
   }
 })
